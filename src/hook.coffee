@@ -23,7 +23,7 @@
 fs = require 'fs'
 Module = require 'module'
 istanbul = require 'istanbul'
-coffee = require 'coffee-script-redux'
+coffee = require 'coffee-script'
 
 originalLoader = require.extensions['.coffee']
 
@@ -42,6 +42,7 @@ transformFn = (matcher, transformer, verbose) ->
             catch ex
                 console.error 'Transformation error; return original code'
                 console.error ex
+                console.error ex.stack
                 transformed = code
         else
             transformed = code

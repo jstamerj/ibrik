@@ -20,11 +20,12 @@
 #  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 #  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-coffee = require 'coffee-script-redux'
+coffee = require 'coffee-script'
 istanbul = require 'istanbul'
 crypto = require 'crypto'
 escodegen = require 'escodegen'
 estraverse = require 'estraverse'
+esprima = require 'esprima'
 
 generateTrackerVar = (filename, omitSuffix) ->
     if omitSuffix
@@ -34,17 +35,6 @@ generateTrackerVar = (filename, omitSuffix) ->
     suffix = hash.digest 'base64'
     suffix = suffix.replace(/\=/g, '').replace(/\+/g, '_').replace(/\//g, '$')
     "__cov_#{suffix}"
-
-# TODO(Constellation)
-# fix CoffeeScriptRedux compiler
-# https://github.com/michaelficarra/CoffeeScriptRedux/issues/117
-removeIndent = (code) ->
-    code.replace /[\uEFEF\uEFFE\uEFFF]/g, ''
-
-calculateColumn = (raw, offset) ->
-    code = raw[...offset]
-    lines = code.split /(?:\r\n|[\r\n])/g
-    (removeIndent lines[lines.length - 1]).length
 
 class Instrumenter extends istanbul.Instrumenter
     constructor: (opt) ->
@@ -70,63 +60,33 @@ class Instrumenter extends istanbul.Instrumenter
 
         throw new Error 'Code must be string' unless typeof code is 'string'
 
-        csast = coffee.parse code, optimise: no, raw: yes
-        program = coffee.compile csast, bare: yes
-        @attachLocation program
+        code = coffee.compile code, sourceMap: true
+        program = esprima.parse(code.js, loc: true)
+        @attachLocation program, code.sourceMap
 
         @walker.startWalk program
         codegenOptions = @opts.codeGenerationOptions or format: compact: not this.opts.noCompact
         "#{@getPreamble code}\n#{escodegen.generate program, codegenOptions}\n"
 
-    attachLocation: (program)->
-        # TODO(Constellation)
-        # calculate precise offset or attach in
-        # CoffeeScriptRedux compiler
+    attachLocation: (program, sourceMap)->
         estraverse.traverse program,
             leave: (node, parent) ->
-                if node.loc? and node.range? and (node.raw? or node.value?)
-                    value =
-                        if node.raw?
-                            node.raw
-                        else if typeof node.value is 'string'
-                            "\"#{node.value.replace /"/g, '\\"'}\""
-                        else
-                            "#{node.value}"
+                mappedLocation = (location) ->
+                  locArray = sourceMap.getSourcePosition([
+                    location.line - program.loc.start.line,
+                    location.column - program.loc.start.column])
+                  line = 0
+                  column = 0
+                  if locArray
+                    line = locArray[0] + program.loc.start.line
+                    column = locArray[1] + program.loc.start.column
+                  return { line: line, column: column }
 
-                    # calculate start line & column
-                    node.loc =
-                        start:
-                            line: node.loc.start.line
-                            column: calculateColumn program.raw, node.range[0]
-                        end:
-                            line: node.loc.start.line
-                            column: 0
-                    node.loc.end.column = node.loc.start.column + value.length
-                    lines = value.split /(?:\r\n|[\r\n])/g
-                    unless lines.length in [0, 1]
-                        node.loc.end.line += lines.length - 1
-                        node.loc.end.column = removeIndent(lines[lines.length - 1]).length
-                else
-                    node.loc = switch node.type
-                        when 'BlockStatement'
-                            start: node.body[0].loc.start
-                            end: node.body[node.body.length - 1].loc.end
-                        when 'VariableDeclarator'
-                            if node?.init?.loc?
-                                start: node.id.loc.start
-                                end: node.init.loc.end
-                            else
-                                node.id.loc
-                        when 'ExpressionStatement'
-                            node.expression.loc
-                        when 'ReturnStatement'
-                            if node.argument? then node.argument.loc else node.loc
-                        when 'VariableDeclaration'
-                            start: node.declarations[0].loc.start
-                            end: node.declarations[node.declarations.length - 1].loc.end
-                        else
-                            start: {line: 0, column: 0}
-                            end: {line: 0, column: 0}
+                if node.loc?.start
+                  node.loc.start = mappedLocation(node.loc.start)
+                if node.loc?.end
+                  node.loc.end = mappedLocation(node.loc.end)
+
                 return
 
 module.exports = Instrumenter

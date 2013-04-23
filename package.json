@@ -10,7 +10,7 @@
     "bin": {
         "ibrik": "./bin/ibrik"
     },
-    "version": "0.0.5-dev",
+    "version": "0.0.6-dev",
     "engines": {
         "node": ">=0.4.0"
     },
@@ -24,13 +24,14 @@
         "url": "http://github.com/Constellation/ibrik.git"
     },
     "dependencies": {
-        "coffee-script-redux": "git://github.com/michaelficarra/CoffeeScriptRedux.git#9895cd1641fdf3a2424e662ab7583726bb0e35b3",
+        "coffee-script": "~ 1.6.2",
         "istanbul": "*",
         "optimist": "*",
         "escodegen": "*",
         "mkdirp": "*",
         "which": "*",
-        "estraverse": "*"
+        "estraverse": "*",
+        "esprima": "1.0.x"
     },
     "devDependencies": {
         "mocha": "*",
