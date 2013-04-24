@@ -26,6 +26,7 @@ istanbul = require 'istanbul'
 coffee = require 'coffee-script'
 
 originalLoader = require.extensions['.coffee']
+originalJSLoader = null
 
 hook = Object.create istanbul.hook
 
@@ -65,9 +66,25 @@ hook.hookRequire = (matcher, transformer, options = {}) ->
 
     istanbul.hook.hookRequire matcher, transformer, options
 
-hook.unhookRequire = ->
-    require.extensions['.coffee'] = originalLoader
-    do istanbul.hook.unhookRequire
+    originalJSLoader = require.extensions['.js']
+    require.extensions['.js'] = (module, filename) ->
+        # When we're testing code that calls require('coffee-script'),
+        # our loader for .coffee is trounced.  I'm not happy about this, but
+        # suppress re-loading coffee-script here
+        if not endsWith(filename, 'coffee-script.js')
+          originalJSLoader module, filename
+        return
 
+hook.unhookRequire = ->
+    if originalJSLoader
+      require.extensions['.js'] = originalJSLoader
+      originalJSLoader = null
+    do istanbul.hook.unhookRequire
+    require.extensions['.coffee'] = originalLoader
+
+endsWith = (string, endString) ->
+  return false if string.length < endString.length
+  return string.substr(string.length - endString.length) is endString
+      
 module.exports = hook
 # vim: set sw=4 ts=4 et tw=80 :

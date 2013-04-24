@@ -31,7 +31,8 @@
         "mkdirp": "*",
         "which": "*",
         "estraverse": "*",
-        "esprima": "1.0.x"
+        "esprima": "1.0.x",
+        "glob": "~ 3.1.14"
     },
     "devDependencies": {
         "mocha": "*",

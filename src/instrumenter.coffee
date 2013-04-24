@@ -26,6 +26,8 @@ crypto = require 'crypto'
 escodegen = require 'escodegen'
 estraverse = require 'estraverse'
 esprima = require 'esprima'
+path = require 'path'
+fs = require 'fs'
 
 generateTrackerVar = (filename, omitSuffix) ->
     if omitSuffix
@@ -60,26 +62,42 @@ class Instrumenter extends istanbul.Instrumenter
 
         throw new Error 'Code must be string' unless typeof code is 'string'
 
-        code = coffee.compile code, sourceMap: true
-        program = esprima.parse(code.js, loc: true)
-        @attachLocation program, code.sourceMap
+        try
+          code = coffee.compile code, sourceMap: true
+          program = esprima.parse(code.js, loc: true)
+          @attachLocation program, code.sourceMap
+        catch e
+          e.message = "Error compiling #{filename}: #{e.message}"
+          throw e
 
         @walker.startWalk program
         codegenOptions = @opts.codeGenerationOptions or format: compact: not this.opts.noCompact
         "#{@getPreamble code}\n#{escodegen.generate program, codegenOptions}\n"
+
+    # Used to ensure that a module is included in the code coverage report
+    # (even if it is not loaded during the test)
+    include: (filename) ->
+        filename = path.resolve(filename)
+        code = fs.readFileSync(filename, 'utf8')
+        @instrumentSync(code, filename)
+
+        # Setup istanbul's references for this module
+        eval("#{@getPreamble null}")
+
+        return
 
     attachLocation: (program, sourceMap)->
         estraverse.traverse program,
             leave: (node, parent) ->
                 mappedLocation = (location) ->
                   locArray = sourceMap.getSourcePosition([
-                    location.line - program.loc.start.line,
-                    location.column - program.loc.start.column])
+                    location.line - 1,
+                    location.column])
                   line = 0
                   column = 0
                   if locArray
-                    line = locArray[0] + program.loc.start.line
-                    column = locArray[1] + program.loc.start.column
+                    line = locArray[0] + 1
+                    column = locArray[1]
                   return { line: line, column: column }
 
                 if node.loc?.start
